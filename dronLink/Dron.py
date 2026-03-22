@@ -55,29 +55,29 @@ class Dron(object):
     # ese atributo hay que declararlo aqui y no en el fichero con los métodos nuevos.
     # Ese es el caso del atributo going, que lo tengo que declarar aqui y preferiría poder declararlo en el fichero dron_goto
 
-    from dronLink.modules.dron_connect import connect, _connect, disconnect, _handle_heartbeat, _record_telemetry_info, _record_local_telemetry_info, reboot, _record_battery_info
-    from dronLink.modules.dron_arm import arm, _arm, setFlightMode
-    from dronLink.modules.dron_takeOff import takeOff, _takeOff, _checkAltitudeReached
-    from dronLink.modules.dron_RTL_Land import  RTL, Land, _goDown, _checkOnHearth
-    from dronLink.modules.dron_nav import _prepare_command, go, _startGo, _stopGo, _goingTread, changeNavSpeed
-    from dronLink.modules.dron_heading import changeHeading, _changeHeading, fixHeading, unfixHeading, _checkHeadingReached, rotate, _rotate
-    from dronLink.modules.dron_goto import goto, _goto, _distanceToDestinationInMeters, _gotoLocal, gotoLocal, _checkLocalArrived, _checkGlobalArrived,_distancia_geografica
-    from dronLink.modules.dron_parameters import getParams, _getParams, setParams, _setParams, _checkParameter
-    from dronLink.modules.dron_geofence import  setScenario, _setScenario, getScenario, _getScenario, _buildScenario
-    from dronLink.modules.dron_telemetry import send_telemetry_info, _send_telemetry_info, stop_sending_telemetry_info
+    from DronLink.dronLink.modules.dron_connect import connect, _connect, disconnect, _handle_heartbeat, _record_telemetry_info, _record_local_telemetry_info, reboot, _record_battery_info
+    from DronLink.dronLink.modules.dron_arm import arm, _arm, setFlightMode
+    from DronLink.dronLink.modules.dron_takeOff import takeOff, _takeOff, _checkAltitudeReached
+    from DronLink.dronLink.modules.dron_RTL_Land import  RTL, Land, _goDown, _checkOnHearth
+    from DronLink.dronLink.modules.dron_nav import _prepare_command, go, _startGo, _stopGo, _goingTread, changeNavSpeed
+    from DronLink.dronLink.modules.dron_heading import changeHeading, _changeHeading, fixHeading, unfixHeading, _checkHeadingReached, rotate, _rotate
+    from DronLink.dronLink.modules.dron_goto import goto, _goto, _distanceToDestinationInMeters, _gotoLocal, gotoLocal, _checkLocalArrived, _checkGlobalArrived,_distancia_geografica
+    from DronLink.dronLink.modules.dron_parameters import getParams, _getParams, setParams, _setParams, _checkParameter
+    from DronLink.dronLink.modules.dron_geofence import  setScenario, _setScenario, getScenario, _getScenario, _buildScenario
+    from DronLink.dronLink.modules.dron_telemetry import send_telemetry_info, _send_telemetry_info, stop_sending_telemetry_info
 
-    from dronLink.modules.dron_local_telemetry import send_local_telemetry_info, _send_local_telemetry_info, stop_sending_local_telemetry_info
-    from dronLink.modules.dron_mission import executeMission, _executeMission, uploadMission, _uploadMission, _getMission, getMission, executeFlightPlan, _executeFlightPlan
-    from dronLink.modules.dron_altitude import change_altitude, _change_altitude
-    from dronLink.modules.dron_drop import drop
-    from dronLink.modules.dron_move import move_distance, _move_distance, _prepare_command_mov,setMoveSpeed, _checkSpeedZero, _move_distance_2
-    from dronLink.modules.dron_bottomGeofence  import startBottomGeofence, stopBottomGeofence,  _minAltChecking
-    from dronLink.modules.dron_RC_override import send_rc
-    from dronLink.modules.message_handler import MessageHandler
-    from dronLink.modules.dron_minAltitude import CheckMinAlt, _CheckMinAlt, StopCheckingMinAlt
-    from dronLink.modules.dron_inDoor import  ActivaLimitesIndoor,_ActivaLimitesIndoor
-    from dronLink.modules.dron_inDoor import EstablecerLimites,DesactivaLimitesIndoor, ActivaLimitesIndoor,ConfiguraVueloExterior, SetHome
-    from dronLink.modules.dron_inDoor import _distancia_punto_a_segmento, _distancia_minima_punto_a_poligono
-    from dronLink.modules.dron_distanceSensor import _record_distance_info, _send_info, send_distance_sensor_info, stop_sending_distance_sensor_info, ConfigureDistanceSensor
+    from DronLink.dronLink.modules.dron_local_telemetry import send_local_telemetry_info, _send_local_telemetry_info, stop_sending_local_telemetry_info
+    from DronLink.dronLink.modules.dron_mission import executeMission, _executeMission, uploadMission, _uploadMission, _getMission, getMission, executeFlightPlan, _executeFlightPlan
+    from DronLink.dronLink.modules.dron_altitude import change_altitude, _change_altitude
+    from DronLink.dronLink.modules.dron_drop import drop
+    from DronLink.dronLink.modules.dron_move import move_distance, _move_distance, _prepare_command_mov,setMoveSpeed, _checkSpeedZero, _move_distance_2
+    from DronLink.dronLink.modules.dron_bottomGeofence  import startBottomGeofence, stopBottomGeofence,  _minAltChecking
+    from DronLink.dronLink.modules.dron_RC_override import send_rc
+    from DronLink.dronLink.modules.message_handler import MessageHandler
+    from DronLink.dronLink.modules.dron_minAltitude import CheckMinAlt, _CheckMinAlt, StopCheckingMinAlt
+    from DronLink.dronLink.modules.dron_inDoor import  ActivaLimitesIndoor,_ActivaLimitesIndoor
+    from DronLink.dronLink.modules.dron_inDoor import EstablecerLimites,DesactivaLimitesIndoor, ActivaLimitesIndoor,ConfiguraVueloExterior, SetHome
+    from DronLink.dronLink.modules.dron_inDoor import _distancia_punto_a_segmento, _distancia_minima_punto_a_poligono
+    from DronLink.dronLink.modules.dron_distanceSensor import _record_distance_info, _send_info, send_distance_sensor_info, stop_sending_distance_sensor_info, ConfigureDistanceSensor
 
-    from dronLink.modules.dron_prueba_altitud import prueba, distancia
+    from DronLink.dronLink.modules.dron_prueba_altitud import prueba, distancia

@@ -1,6 +1,6 @@
 import time
 
-from dronLink.Dron import Dron
+from DronLink.dronLink.Dron import Dron
 
 dron = Dron ()
 connection_string = 'tcp:127.0.0.1:5763'

@@ -47,6 +47,8 @@ def _distancia_geografica(self, pos1, pos2):
 def _checkGlobalArrived (self, msg, destino):
     posicion = [float(msg.lat / 10 ** 7),float(msg.lon / 10 ** 7),float(msg.relative_alt / 1000)  ]
     distancia = self._distancia_geografica(posicion, destino)
+    #return distancia < 0.5
+    #print("dist:", distancia)
     return distancia < 0.5
 
 

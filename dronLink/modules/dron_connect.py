@@ -2,7 +2,7 @@ import math
 import threading
 import time
 
-from dronLink.modules.message_handler import MessageHandler
+from DronLink.dronLink.modules.message_handler import MessageHandler
 from pymavlink import mavutil
 
 ''' Esta función sirve exclusivamente para detectar cuándo el dron se desarma porque 
