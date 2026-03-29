@@ -1,16 +1,11 @@
 import math
+import threading
 import time
 
 try:
     from dronLink.Dron import Dron
 except Exception:
     Dron = None
-
-try:
-    from pymavlink import mavutil
-except Exception:
-    mavutil = None
-
 
 RADIO_TIERRA_M = 6371000.0
 
@@ -84,22 +79,53 @@ def a_global(origen, punto):
 def distancia(a, b):
     return math.dist(a, b)
 
+
+def leer_posicion_dron(dron, espera=5):
+    posicion = {"lat": None, "lon": None}
+    recibida = threading.Event()
+
+    def procesar_telemetria(telemetry_info):
+        lat = telemetry_info.get("lat")
+        lon = telemetry_info.get("lon")
+        if lat or lon:
+            posicion["lat"] = lat
+            posicion["lon"] = lon
+            recibida.set()
+
+    dron.send_telemetry_info(procesar_telemetria)
+    recibida.wait(espera)
+    dron.stop_sending_telemetry_info()
+    time.sleep(0.2)
+
+    if posicion["lat"] is None or posicion["lon"] is None:
+        return None
+
+    return posicion["lat"], posicion["lon"]
+
+
 def leer_escenario():
     if Dron is None:
-        return SCENARIO, "scenario hardcodeado", None
+        return SCENARIO, "scenario hardcodeado", None, D
 
     for conexion, baud in CONEXIONES:
         dron = Dron()
         escenario = None
+        posicion = None
         try:
-            dron.connect(conexion, baud, freq=1)
+            dron.connect(conexion, baud, freq=10)
             time.sleep(1)
 
             for _ in range(3):
                 escenario = dron.getScenario()
                 if escenario:
-                    print(f"Estoy usando el geofence del dron en {conexion}")
-                    return escenario, f"geofence del dron ({conexion})", dron
+                    posicion = leer_posicion_dron(dron)
+                    if posicion is not None:
+                        print(f"Estoy usando el geofence del dron en {conexion}")
+                        print(f"Y tambien la posicion real del dron: {posicion}")
+                        return escenario, f"geofence del dron ({conexion})", dron, posicion
+
+                    print(f"He leido el geofence del dron en {conexion}, pero no ha llegado telemetria")
+                    return escenario, f"geofence del dron ({conexion})", dron, D
                 time.sleep(0.5)
         except Exception:
             pass
@@ -111,7 +137,7 @@ def leer_escenario():
                     pass
 
     # Si no hay dron disponible, tiro con el scenario que ya tenia puesto
-    return SCENARIO, "scenario hardcodeado", None
+    return SCENARIO, "scenario hardcodeado", None, D
 
 
 def leer_usuario():
@@ -286,9 +312,10 @@ def calculo(escenario, D, M, margen):
 if __name__ == "__main__":
     usuario = leer_usuario()
     margen = leer_margen()
-    escenario, origen, dron = leer_escenario()
-    resultado = calculo(escenario, D, USUARIOS[usuario], margen)
+    escenario, origen, dron, posicion_dron = leer_escenario()
+    resultado = calculo(escenario, posicion_dron, USUARIOS[usuario], margen)
     print(origen)
+    print(f"Posicion usada del dron: lat={posicion_dron[0]}, lon={posicion_dron[1]}")
     print(resultado)
 
     if dron is not None and quiere_ir_al_punto():
