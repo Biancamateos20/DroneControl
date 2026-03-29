@@ -1,7 +1,7 @@
 import math
 
 try:
-    from dronLink.Dron import Dron
+    from DronLink.dronLink.Dron import Dron
 except Exception:
     Dron = None
 
