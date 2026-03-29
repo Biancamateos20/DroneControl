@@ -315,6 +315,10 @@ if __name__ == "__main__":
         lat, lon = resultado["p"]
         alt = dron.alt if dron.alt > 1 else 2
 
+        print("voy a armar")
+        dron.arm()
+        print("Voy a despegar")
+        dron.takeOff(5)
         print(f"Voy al punto calculado: lat={lat}, lon={lon}, alt={alt}")
         dron.goto(lat, lon, alt)
         print("Ya he llegado al punto")
