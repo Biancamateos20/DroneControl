@@ -80,6 +80,13 @@ def distancia(a, b):
     return math.dist(a, b)
 
 
+def distancia_lado(punto, a, b):
+    # Distancia perpendicular con signo a la recta que pasa por ese lado
+    return (
+        (punto[0] - a[0]) * (b[1] - a[1]) - (punto[1] - a[1]) * (b[0] - a[0])
+    ) / math.hypot(b[0] - a[0], b[1] - a[1])
+
+
 def leer_posicion_dron(dron, espera=5):
     posicion = {"lat": None, "lon": None}
     recibida = threading.Event()
@@ -274,37 +281,40 @@ def calculo(escenario, D, M, margen):
     punto_fence = corte["punto"]
     distancia_fence = distancia((0.0, 0.0), punto_fence)
 
-    # Si el margen es mayor que la distancia al fence, no tiene sentido
-    if margen >= distancia_fence:
+    if "segmento" not in corte:
+        raise ValueError("Este calculo esta pensado para un fence poligonal.")
+
+    a, b = corte["segmento"]
+    distancia_dron_lado = abs(distancia_lado((0.0, 0.0), a, b))
+
+    # Si el dron ya esta mas cerca del lado que el margen pedido, no hay punto valido antes del fence
+    if margen > distancia_dron_lado:
         raise ValueError(
-            f"El fence se alcanza a {distancia_fence:.2f} m; "
-            f"no se puede frenar {margen:.2f} m antes."
+            f"El dron esta a {distancia_dron_lado:.2f} m de la arista; "
+            f"no se puede parar a {margen:.2f} m de ella."
         )
 
-    # Esto es la longitud del vector D -> M para sacar su direccion unitaria
-    largo = math.hypot(destino[0], destino[1])
-    if largo == 0:
-        raise ValueError("El dron y el usuario estan en el mismo punto.")
+    if distancia_dron_lado == 0:
+        raise ValueError("El dron ya esta sobre la arista del geofence.")
 
-    # Retrocedo el margen desde el punto donde se toca el fence
-    punto_parada = (
-        punto_fence[0] - destino[0] * margen / largo,
-        punto_fence[1] - destino[1] * margen / largo,
-    )
+    # La distancia perpendicular al lado baja de forma lineal hasta 0 en el corte
+    t_parada = corte["t"] * (1 - margen / distancia_dron_lado)
+    punto_parada = (destino[0] * t_parada, destino[1] * t_parada)
+    distancia_p_lado = abs(distancia_lado(punto_parada, a, b))
 
     resultado = {
         "usuario": M,
         "p": a_global(D, punto_parada),
         "fence_mas_cercano": corte["tipo"],
         "distancia_desde_dron_al_fence_m": distancia_fence,
-        "distancia_desde_p_al_fence_m": distancia(punto_parada, punto_fence),
+        "distancia_desde_p_al_fence_m": distancia_p_lado,
+        "distancia_perpendicular_desde_dron_a_la_arista_m": distancia_dron_lado,
+        "distancia_perpendicular_desde_p_a_la_arista_m": distancia_p_lado,
         "margen_solicitado_m": margen,
         "punto_fence": a_global(D, punto_fence),
     }
 
-    if "segmento" in corte:
-        a, b = corte["segmento"]
-        resultado["segmento_fence"] = (a_global(D, a), a_global(D, b))
+    resultado["segmento_fence"] = (a_global(D, a), a_global(D, b))
 
     return resultado
 
