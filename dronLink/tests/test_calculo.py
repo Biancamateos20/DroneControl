@@ -1,4 +1,5 @@
 import math
+import time
 
 try:
     from DronLink.dronLink.Dron import Dron
@@ -62,9 +63,12 @@ CONEXIONES = [
 
 
 def a_local(origen, punto):
+    # Paso todo a coordenadas locales para trabajar en metros
     lat0, lon0 = map(math.radians, origen)
     lat, lon = map(math.radians, punto)
+    # x sale de la diferencia de longitud, corregida por cos(lat)
     x = (lon - lon0) * RADIO_TIERRA_M * math.cos(lat0)
+    # y sale directamente de la diferencia de latitud
     y = (lat - lat0) * RADIO_TIERRA_M
     return x, y
 
@@ -72,6 +76,7 @@ def a_local(origen, punto):
 def a_global(origen, punto):
     lat0, lon0 = origen
     x, y = punto
+    # Aqui hago la inversa para volver de metros a lat/lon
     lat = lat0 + math.degrees(y / RADIO_TIERRA_M)
     lon = lon0 + math.degrees(x / (RADIO_TIERRA_M * math.cos(math.radians(lat0))))
     return lat, lon
@@ -101,27 +106,32 @@ def probar_conexion(conexion, baud, timeout=2):
 
 def leer_escenario():
     if Dron is None or mavutil is None:
-        return SCENARIO, "scenario hardcodeado"
+        return SCENARIO, "scenario hardcodeado", None
 
     for conexion, baud in CONEXIONES:
         if not probar_conexion(conexion, baud):
             continue
 
         dron = Dron()
+        escenario = None
         try:
             dron.connect(conexion, baud)
             escenario = dron.getScenario()
             if escenario:
-                return escenario, f"geofence del dron ({conexion})"
+                # Le doy un momento para que llegue algo de telemetria
+                time.sleep(1)
+                return escenario, f"geofence del dron ({conexion})", dron
         except Exception:
             pass
         finally:
-            try:
-                dron.disconnect()
-            except Exception:
-                pass
+            if not escenario:
+                try:
+                    dron.disconnect()
+                except Exception:
+                    pass
 
-    return SCENARIO, "scenario hardcodeado"
+    # Si no hay dron disponible, tiro con el scenario que ya tenia puesto
+    return SCENARIO, "scenario hardcodeado", None
 
 
 def leer_usuario():
@@ -138,6 +148,11 @@ def leer_margen():
             return float(input("Metros antes del geofence para parar el dron: ").replace(",", "."))
         except ValueError:
             print("Introduce un numero valido.")
+
+
+def quiere_ir_al_punto():
+    respuesta = input("Quieres hacer goto al punto calculado y luego Land? (s/n): ").strip().lower()
+    return respuesta in ["s", "si", "sí", "y", "yes"]
 
 
 def dentro_poligono(punto, poligono):
@@ -163,6 +178,7 @@ def buscar_primer_corte(escenario, D, M):
     epsilon = 1e-6
 
     if fence["type"] == "polygon":
+        # El calculo se hace solo con el fence de inclusion
         poligono = [a_local(D, (wp["lat"], wp["lon"])) for wp in fence["waypoints"]]
 
         if not dentro_poligono(origen, poligono):
@@ -177,6 +193,7 @@ def buscar_primer_corte(escenario, D, M):
             b = poligono[(i + 1) % len(poligono)]
             sx = b[0] - a[0]
             sy = b[1] - a[1]
+            # Este denominador me dice si la trayectoria y el lado son paralelos o no
             den = dx * sy - dy * sx
 
             if abs(den) < 1e-9:
@@ -184,7 +201,9 @@ def buscar_primer_corte(escenario, D, M):
 
             qx = a[0] - origen[0]
             qy = a[1] - origen[1]
+            # t es donde cae el corte sobre la trayectoria D -> M
             t = (qx * sy - qy * sx) / den
+            # u es donde cae ese mismo corte dentro del lado del poligono
             u = (qx * dy - qy * dx) / den
 
             if epsilon < t <= 1.0 and 0.0 <= u <= 1.0:
@@ -201,6 +220,7 @@ def buscar_primer_corte(escenario, D, M):
         if not cortes:
             raise ValueError("La trayectoria D -> M no corta el geofence.")
 
+        # Me quedo con el primer corte en la trayectoria
         return min(cortes, key=lambda corte: corte["t"]), destino
 
     if fence["type"] == "circle":
@@ -215,6 +235,8 @@ def buscar_primer_corte(escenario, D, M):
         ox = origen[0] - centro[0]
         oy = origen[1] - centro[1]
 
+        # Aqui sale la interseccion entre la recta D->M y el circulo
+        # Sale de meter la recta en la ecuacion del circulo y resolver la cuadratica
         aa = dx * dx + dy * dy
         bb = 2 * (ox * dx + oy * dy)
         cc = ox * ox + oy * oy - radio * radio
@@ -246,16 +268,19 @@ def calculo(escenario, D, M, margen):
     punto_fence = corte["punto"]
     distancia_fence = distancia((0.0, 0.0), punto_fence)
 
+    # Si el margen es mayor que la distancia al fence, no tiene sentido
     if margen >= distancia_fence:
         raise ValueError(
             f"El fence se alcanza a {distancia_fence:.2f} m; "
             f"no se puede frenar {margen:.2f} m antes."
         )
 
+    # Esto es la longitud del vector D -> M para sacar su direccion unitaria
     largo = math.hypot(destino[0], destino[1])
     if largo == 0:
         raise ValueError("El dron y el usuario estan en el mismo punto.")
 
+    # Retrocedo el margen desde el punto donde se toca el fence
     punto_parada = (
         punto_fence[0] - destino[0] * margen / largo,
         punto_fence[1] - destino[1] * margen / largo,
@@ -281,7 +306,30 @@ def calculo(escenario, D, M, margen):
 if __name__ == "__main__":
     usuario = leer_usuario()
     margen = leer_margen()
-    escenario, origen = leer_escenario()
+    escenario, origen, dron = leer_escenario()
     resultado = calculo(escenario, D, USUARIOS[usuario], margen)
     print(origen)
     print(resultado)
+
+    if dron is not None and quiere_ir_al_punto():
+        lat, lon = resultado["p"]
+        alt = dron.alt if dron.alt > 1 else 2
+
+        print(f"Voy al punto calculado: lat={lat}, lon={lon}, alt={alt}")
+        dron.goto(lat, lon, alt)
+        print("Ya he llegado al punto")
+
+        # Si ya esta en el aire, fuerzo el estado para que Land entre sin problemas
+        if dron.alt > 0.5:
+            dron.state = "flying"
+
+        if dron.Land():
+            print("Aterrizando")
+        else:
+            print("No he podido hacer Land. El dron no estaba volando.")
+
+    if dron is not None:
+        try:
+            dron.disconnect()
+        except Exception:
+            pass
