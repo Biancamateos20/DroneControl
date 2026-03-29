@@ -84,33 +84,11 @@ def a_global(origen, punto):
 def distancia(a, b):
     return math.dist(a, b)
 
-
-def probar_conexion(conexion, baud, timeout=2):
-    if mavutil is None:
-        return False
-
-    vehiculo = None
-    try:
-        vehiculo = mavutil.mavlink_connection(conexion, baud=baud)
-        return vehiculo.wait_heartbeat(timeout=timeout) is not None
-    except Exception:
-        return False
-    finally:
-        if vehiculo is not None:
-            try:
-                vehiculo.close()
-            except Exception:
-                pass
-
-
 def leer_escenario():
-    if Dron is None or mavutil is None:
+    if Dron is None:
         return SCENARIO, "scenario hardcodeado", None
 
     for conexion, baud in CONEXIONES:
-        if not probar_conexion(conexion, baud):
-            continue
-
         dron = Dron()
         escenario = None
         try:
@@ -120,6 +98,7 @@ def leer_escenario():
             for _ in range(3):
                 escenario = dron.getScenario()
                 if escenario:
+                    print(f"Estoy usando el geofence del dron en {conexion}")
                     return escenario, f"geofence del dron ({conexion})", dron
                 time.sleep(0.5)
         except Exception:
