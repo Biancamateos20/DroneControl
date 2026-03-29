@@ -5,6 +5,11 @@ try:
 except Exception:
     Dron = None
 
+try:
+    from pymavlink import mavutil
+except Exception:
+    mavutil = None
+
 
 RADIO_TIERRA_M = 6371000.0
 
@@ -76,11 +81,32 @@ def distancia(a, b):
     return math.dist(a, b)
 
 
+def probar_conexion(conexion, baud, timeout=2):
+    if mavutil is None:
+        return False
+
+    vehiculo = None
+    try:
+        vehiculo = mavutil.mavlink_connection(conexion, baud=baud)
+        return vehiculo.wait_heartbeat(timeout=timeout) is not None
+    except Exception:
+        return False
+    finally:
+        if vehiculo is not None:
+            try:
+                vehiculo.close()
+            except Exception:
+                pass
+
+
 def leer_escenario():
-    if Dron is None:
+    if Dron is None or mavutil is None:
         return SCENARIO, "scenario hardcodeado"
 
     for conexion, baud in CONEXIONES:
+        if not probar_conexion(conexion, baud):
+            continue
+
         dron = Dron()
         try:
             dron.connect(conexion, baud)
@@ -96,6 +122,22 @@ def leer_escenario():
                 pass
 
     return SCENARIO, "scenario hardcodeado"
+
+
+def leer_usuario():
+    while True:
+        usuario = input("Elige usuario destino (m1, m2 o m3): ").strip().lower()
+        if usuario in USUARIOS:
+            return usuario
+        print("Usuario no valido.")
+
+
+def leer_margen():
+    while True:
+        try:
+            return float(input("Metros antes del geofence para parar el dron: ").replace(",", "."))
+        except ValueError:
+            print("Introduce un numero valido.")
 
 
 def dentro_poligono(punto, poligono):
@@ -237,7 +279,9 @@ def calculo(escenario, D, M, margen):
 
 
 if __name__ == "__main__":
+    usuario = leer_usuario()
+    margen = leer_margen()
     escenario, origen = leer_escenario()
-    resultado = calculo(escenario, D, USUARIOS["m1"], 3)
+    resultado = calculo(escenario, D, USUARIOS[usuario], margen)
     print(origen)
     print(resultado)
