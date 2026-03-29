@@ -2,7 +2,7 @@ import math
 import time
 
 try:
-    from DronLink.dronLink.Dron import Dron
+    from dronLink.Dron import Dron
 except Exception:
     Dron = None
 
@@ -114,12 +114,14 @@ def leer_escenario():
         dron = Dron()
         escenario = None
         try:
-            dron.connect(conexion, baud)
-            escenario = dron.getScenario()
-            if escenario:
-                # Le doy un momento para que llegue algo de telemetria
-                time.sleep(1)
-                return escenario, f"geofence del dron ({conexion})", dron
+            dron.connect(conexion, baud, freq=1)
+            time.sleep(1)
+
+            for _ in range(3):
+                escenario = dron.getScenario()
+                if escenario:
+                    return escenario, f"geofence del dron ({conexion})", dron
+                time.sleep(0.5)
         except Exception:
             pass
         finally:
