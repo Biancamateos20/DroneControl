@@ -4,20 +4,45 @@ import math
 
 RADIO_TIERRA_M = 6371000.0
 
-M1 = (41.276380, 1.988146)
-M2 = (41.276568, 1.988428)
-M3 = (41.276304, 1.989122)
 D = (41.276443, 1.988586)
+USUARIOS = {
+    "m1": (41.276380, 1.988146),
+    "m2": (41.276568, 1.988428),
+    "m3": (41.276304, 1.989122),
+}
 
 SCENARIO = [
     {
         "type": "polygon",
         "waypoints": [
-            {"lat": M1[0], "lon": M1[1]},
-            {"lat": M2[0], "lon": M2[1]},
-            {"lat": M3[0], "lon": M3[1]},
+            {"lat": 41.2764398, "lon": 1.9882585},
+            {"lat": 41.2761999, "lon": 1.9883537},
+            {"lat": 41.2763854, "lon": 1.9890994},
+            {"lat": 41.2766273, "lon": 1.9889948},
         ],
-    }
+    },
+    {
+        "type": "polygon",
+        "waypoints": [
+            {"lat": 41.2764801, "lon": 1.9886541},
+            {"lat": 41.2764519, "lon": 1.9889626},
+            {"lat": 41.2763995, "lon": 1.9887963},
+        ],
+    },
+    {
+        "type": "polygon",
+        "waypoints": [
+            {"lat": 41.2764035, "lon": 1.9883262},
+            {"lat": 41.2762160, "lon": 1.9883537},
+            {"lat": 41.2762281, "lon": 1.9884771},
+        ],
+    },
+    {
+        "type": "circle",
+        "radius": 2,
+        "lat": 41.2763430,
+        "lon": 1.9883953,
+    },
 ]
 
 
@@ -39,23 +64,24 @@ def _local_a_latlon(origen, punto):
     return lat, lon
 
 
-def _proyeccion_punto_a_segmento(punto, inicio, fin):
-    px, py = punto
-    x1, y1 = inicio
-    x2, y2 = fin
+def _resta(a, b):
+    return a[0] - b[0], a[1] - b[1]
 
-    dx = x2 - x1
-    dy = y2 - y1
-    longitud2 = dx * dx + dy * dy
 
-    if longitud2 == 0:
-        return inicio, math.dist(punto, inicio)
+def _suma(a, b):
+    return a[0] + b[0], a[1] + b[1]
 
-    t = ((px - x1) * dx + (py - y1) * dy) / longitud2
-    t = max(0.0, min(1.0, t))
 
-    proyeccion = (x1 + t * dx, y1 + t * dy)
-    return proyeccion, math.dist(punto, proyeccion)
+def _escala(v, escalar):
+    return v[0] * escalar, v[1] * escalar
+
+
+def _producto_cruz(a, b):
+    return a[0] * b[1] - a[1] * b[0]
+
+
+def _distancia(a, b):
+    return math.dist(a, b)
 
 
 def _punto_en_poligono(punto, poligono):
@@ -75,75 +101,138 @@ def _punto_en_poligono(punto, poligono):
     return dentro
 
 
-def _punto_mas_cercano_al_geofence(dron_local, poligono_local):
-    mejor_punto = None
-    mejor_distancia = float("inf")
-    mejor_segmento = None
+def _interseccion_segmentos(origen, destino, inicio, fin, epsilon=1e-9):
+    direccion = _resta(destino, origen)
+    lado = _resta(fin, inicio)
+    denominador = _producto_cruz(direccion, lado)
 
-    for i in range(len(poligono_local)):
-        inicio = poligono_local[i]
-        fin = poligono_local[(i + 1) % len(poligono_local)]
-        proyeccion, distancia = _proyeccion_punto_a_segmento(dron_local, inicio, fin)
+    if abs(denominador) < epsilon:
+        return None
 
-        if distancia < mejor_distancia:
-            mejor_punto = proyeccion
-            mejor_distancia = distancia
-            mejor_segmento = (inicio, fin)
+    delta = _resta(inicio, origen)
+    t = _producto_cruz(delta, lado) / denominador
+    u = _producto_cruz(delta, direccion) / denominador
 
-    return mejor_punto, mejor_distancia, mejor_segmento
+    if 0.0 <= t <= 1.0 and 0.0 <= u <= 1.0:
+        punto = _suma(origen, _escala(direccion, t))
+        return t, punto
+
+    return None
 
 
-def calculo(escenario, dron, margen_metros):
+def _intersecciones_segmento_poligono(origen, destino, poligono, tipo_fence):
+    intersecciones = []
+
+    for i in range(len(poligono)):
+        inicio = poligono[i]
+        fin = poligono[(i + 1) % len(poligono)]
+        interseccion = _interseccion_segmentos(origen, destino, inicio, fin)
+        if interseccion is None:
+            continue
+
+        t, punto = interseccion
+        intersecciones.append(
+            {
+                "tipo": tipo_fence,
+                "t": t,
+                "punto_local": punto,
+                "segmento": (inicio, fin),
+            }
+        )
+
+    return intersecciones
+
+
+def _normalizar(v):
+    longitud = math.hypot(v[0], v[1])
+    if longitud == 0:
+        raise ValueError("El dron y el usuario estan en el mismo punto.")
+    return v[0] / longitud, v[1] / longitud
+
+
+def _primer_fence_en_trayectoria(escenario, dron, destino):
+    dron_local = (0.0, 0.0)
+    destino_local = _latlon_a_local(dron, destino)
+    inclusion = escenario[0]
+
+    if inclusion["type"] != "polygon":
+        raise ValueError("El primer fence del scenario debe ser un poligono de inclusion.")
+
+    inclusion_local = [
+        _latlon_a_local(dron, (wp["lat"], wp["lon"]))
+        for wp in inclusion["waypoints"]
+    ]
+
+    if not _punto_en_poligono(dron_local, inclusion_local):
+        raise ValueError("El dron D debe estar dentro del fence de inclusion.")
+
+    candidatos = _intersecciones_segmento_poligono(
+        dron_local,
+        destino_local,
+        inclusion_local,
+        "inclusion_polygon",
+    )
+
+    epsilon = 1e-6
+    candidatos_validos = [c for c in candidatos if c["t"] > epsilon]
+    if not candidatos_validos:
+        raise ValueError("La trayectoria D -> M no corta el poligono del geofence.")
+
+    return min(candidatos_validos, key=lambda candidato: candidato["t"]), destino_local
+
+
+def calculo(escenario, dron, usuario, margen_metros):
     if margen_metros < 0:
         raise ValueError("La distancia de margen no puede ser negativa.")
 
-    inclusion = escenario[0]
-    if inclusion["type"] != "polygon":
-        raise ValueError("Este calculo solo esta implementado para geofence poligonal.")
+    interseccion, destino_local = _primer_fence_en_trayectoria(escenario, dron, usuario)
+    punto_fence = interseccion["punto_local"]
+    distancia_al_fence = _distancia((0.0, 0.0), punto_fence)
 
-    poligono_geo = [(wp["lat"], wp["lon"]) for wp in inclusion["waypoints"]]
-    poligono_local = [_latlon_a_local(dron, punto) for punto in poligono_geo]
-    dron_local = (0.0, 0.0)
-
-    if not _punto_en_poligono(dron_local, poligono_local):
-        raise ValueError("El punto del dron no esta dentro del geofence.")
-
-    borde_local, distancia_borde, segmento = _punto_mas_cercano_al_geofence(dron_local, poligono_local)
-
-    if margen_metros >= distancia_borde:
+    if margen_metros >= distancia_al_fence:
         raise ValueError(
-            f"El dron ya esta a {distancia_borde:.2f} m del geofence; "
-            f"no se puede dejar un margen de {margen_metros:.2f} m."
+            f"El fence se alcanza a {distancia_al_fence:.2f} m; "
+            f"no se puede frenar {margen_metros:.2f} m antes."
         )
 
-    factor = margen_metros / distancia_borde
-    punto_parada_local = (
-        borde_local[0] * (1.0 - factor),
-        borde_local[1] * (1.0 - factor),
+    direccion = _normalizar(_resta(destino_local, (0.0, 0.0)))
+    punto_parada_local = _suma(
+        punto_fence,
+        _escala(direccion, -margen_metros),
     )
 
-    punto_parada_geo = _local_a_latlon(dron, punto_parada_local)
-    punto_borde_geo = _local_a_latlon(dron, borde_local)
-
-    return {
-        "p": punto_parada_geo,
-        "distancia_actual_al_geofence_m": distancia_borde,
+    resultado = {
+        "usuario": usuario,
+        "p": _local_a_latlon(dron, punto_parada_local),
+        "fence_mas_cercano": interseccion["tipo"],
+        "distancia_desde_dron_al_fence_m": distancia_al_fence,
+        "distancia_desde_p_al_fence_m": _distancia(punto_parada_local, punto_fence),
         "margen_solicitado_m": margen_metros,
-        "punto_borde_mas_cercano": punto_borde_geo,
-        "segmento_mas_cercano": (
-            _local_a_latlon(dron, segmento[0]),
-            _local_a_latlon(dron, segmento[1]),
-        ),
+        "punto_fence": _local_a_latlon(dron, punto_fence),
     }
+
+    if "segmento" in interseccion:
+        resultado["segmento_fence"] = (
+            _local_a_latlon(dron, interseccion["segmento"][0]),
+            _local_a_latlon(dron, interseccion["segmento"][1]),
+        )
+
+    return resultado
 
 
 def caculo(escenario, D, M, d):
-    return calculo(escenario, D, d)
+    return calculo(escenario, D, M, d)
 
 
 def _leer_argumentos():
     parser = argparse.ArgumentParser(
-        description="Calcula el punto P donde debe pararse el dron antes de llegar al geofence."
+        description="Calcula el punto P donde debe pararse el dron antes de tocar el geofence."
+    )
+    parser.add_argument(
+        "usuario",
+        nargs="?",
+        choices=sorted(USUARIOS.keys()),
+        help="Usuario destino: m1, m2 o m3.",
     )
     parser.add_argument(
         "margen",
@@ -154,22 +243,35 @@ def _leer_argumentos():
     return parser.parse_args()
 
 
+def _leer_usuario_terminal():
+    usuario = input("Elige usuario destino (m1, m2 o m3): ").strip().lower()
+    if usuario not in USUARIOS:
+        raise ValueError("Usuario no valido. Debe ser m1, m2 o m3.")
+    return usuario
+
+
+def _leer_margen_terminal():
+    return float(input("Introduce los metros antes del geofence para parar el dron: ").replace(",", "."))
+
+
 def main():
     args = _leer_argumentos()
-    margen = args.margen
+    usuario_id = args.usuario or _leer_usuario_terminal()
+    margen = args.margen if args.margen is not None else _leer_margen_terminal()
+    usuario = USUARIOS[usuario_id]
 
-    if margen is None:
-        margen = float(input("Introduce los metros antes del geofence para parar el dron: ").replace(",", "."))
-
-    resultado = calculo(SCENARIO, D, margen)
+    resultado = calculo(SCENARIO, D, usuario, margen)
     punto_p = resultado["p"]
-    punto_borde = resultado["punto_borde_mas_cercano"]
+    punto_fence = resultado["punto_fence"]
 
-    print("Geofence definido por M1, M2 y M3")
+    print("Scenario usado como geofence del dron")
     print(f"Dron D: lat={D[0]:.7f}, lon={D[1]:.7f}")
-    print(f"Distancia actual al geofence: {resultado['distancia_actual_al_geofence_m']:.2f} m")
-    print(f"Punto del borde mas cercano: lat={punto_borde[0]:.7f}, lon={punto_borde[1]:.7f}")
-    print(f"Punto P de parada a {margen:.2f} m del geofence: lat={punto_p[0]:.7f}, lon={punto_p[1]:.7f}")
+    print(f"Usuario {usuario_id.upper()}: lat={usuario[0]:.7f}, lon={usuario[1]:.7f}")
+    print(f"Primer fence en la trayectoria: {resultado['fence_mas_cercano']}")
+    print(f"Punto donde la trayectoria toca el fence: lat={punto_fence[0]:.7f}, lon={punto_fence[1]:.7f}")
+    print(f"Distancia desde D hasta ese fence: {resultado['distancia_desde_dron_al_fence_m']:.2f} m")
+    print(f"Distancia exacta desde P hasta el fence: {resultado['distancia_desde_p_al_fence_m']:.6f} m")
+    print(f"Punto P de parada a {margen:.2f} m antes del geofence: lat={punto_p[0]:.7f}, lon={punto_p[1]:.7f}")
 
 
 if __name__ == "__main__":
