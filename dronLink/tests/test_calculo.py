@@ -319,14 +319,21 @@ if __name__ == "__main__":
     print(resultado)
 
     if dron is not None and quiere_ir_al_punto():
-        lat, lon = resultado["p"]
-        alt = dron.alt if dron.alt > 1 else 2
-
         print("voy a armar")
         dron.arm()
         print("Voy a despegar")
         dron.takeOff(5)
-        print(f"Voy al punto calculado: lat={lat}, lon={lon}, alt={alt}")
+
+        posicion_dron = leer_posicion_dron(dron)
+        if posicion_dron is None:
+            posicion_dron = D
+
+        resultado = calculo(escenario, posicion_dron, USUARIOS[usuario], margen)
+        lat, lon = resultado["p"]
+        alt = dron.alt if dron.alt > 1 else 5
+
+        print(f"Recalculo P con la posicion actual del dron: {posicion_dron}")
+        print(f"Nuevo punto P: lat={lat}, lon={lon}, alt={alt}")
         dron.goto(lat, lon, alt)
         print("Ya he llegado al punto")
 
