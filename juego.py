@@ -245,6 +245,31 @@ def setSpeed(speed):
         dron.changeNavSpeed(speed)
         return True, None
 
+
+def centrarImagen(command):
+    global dron
+
+    normalized = str(command or "Stop").strip().capitalize()
+    if normalized not in ("Left", "Right", "Stop"):
+        return False, f"Comando de centrado no válido: {command}"
+
+    with dron_lock:
+        if dron is None:
+            if normalized == "Stop":
+                return True, None
+            return False, "Dron no conectado"
+
+        if normalized == "Stop":
+            if getattr(dron, "going", False):
+                dron.go("Stop")
+            return True, None
+
+        if getattr(dron, "state", None) != "flying":
+            return False, f"No se puede centrar si no está volando (estado: {getattr(dron,'state',None)})"
+
+        dron.go(normalized)
+        return True, None
+
 # ===============================
 # MQTT CALLBACKS
 # ===============================
@@ -307,6 +332,9 @@ def on_message(client, userdata, msg):
             else:
                 speed = float(data)
             run_async_action("SPEED", setSpeed, speed)
+
+        elif topic == TOPIC_CENTRARIMAGEN:
+            run_async_action("CENTRAR_IMAGEN", centrarImagen, payload)
 
         else:
             print(f"Topic no reconocido: {topic}")
