@@ -28,6 +28,7 @@ TOPIC_GEOFENCE_POINTS = "mobileFlask/demoDash/geofencePoints"
 current_geofence = None
 TOPIC_SPEED = "mobileFlask/demoDash/speed"
 TOPIC_CENTRARIMAGEN = "mobileFlask/demoDash/centrarimagen"
+CENTER_IMAGE_MIN_SPEED = 0.1
 
 
 app = Flask(__name__)
@@ -39,6 +40,7 @@ jugadores = []
 juego_en_curso = False
 dron = None
 dron_lock = threading.Lock()
+center_image_prev_speed = None
 
 #GEOFENCE_BUFFER_M = 2  # 2 m
 
@@ -85,12 +87,13 @@ def conectar_dron(tipo: str):
 # ====================================================
 
 def desconectar_dron():
-    global dron
+    global dron, center_image_prev_speed
     with dron_lock:
         if dron is None:
             return True, None
         ok = bool(dron.disconnect())
         dron = None
+        center_image_prev_speed = None
         print("Dron desconectado" if ok else "No se pudo desconectar")
         return ok, None
 
@@ -118,6 +121,7 @@ def despegar_dron(h):
 # ================================================
 
 def land_dron():
+    global center_image_prev_speed
     with dron_lock:
         if dron is None:
             return False, "No hay instancia de dron."
@@ -126,6 +130,7 @@ def land_dron():
             return False, f"No se puede hacer goto si no está volando (estado: {getattr(dron,'state',None)})"
 
 
+        center_image_prev_speed = None
         dron.Land()
         return True, None
 
@@ -247,7 +252,7 @@ def setSpeed(speed):
 
 
 def centrarImagen(command):
-    global dron
+    global dron, center_image_prev_speed
 
     normalized = str(command or "Stop").strip().capitalize()
     if normalized not in ("Left", "Right", "Stop"):
@@ -262,10 +267,20 @@ def centrarImagen(command):
         if normalized == "Stop":
             if getattr(dron, "going", False):
                 dron.go("Stop")
+            if center_image_prev_speed is not None:
+                dron.changeNavSpeed(center_image_prev_speed)
+                center_image_prev_speed = None
             return True, None
 
         if getattr(dron, "state", None) != "flying":
             return False, f"No se puede centrar si no está volando (estado: {getattr(dron,'state',None)})"
+
+        current_speed = float(getattr(dron, "navSpeed", CENTER_IMAGE_MIN_SPEED) or CENTER_IMAGE_MIN_SPEED)
+        if center_image_prev_speed is None and current_speed > CENTER_IMAGE_MIN_SPEED:
+            center_image_prev_speed = current_speed
+
+        if current_speed != CENTER_IMAGE_MIN_SPEED:
+            dron.changeNavSpeed(CENTER_IMAGE_MIN_SPEED)
 
         dron.go(normalized)
         return True, None
